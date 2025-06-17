@@ -1,11 +1,16 @@
-import { useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
-import { parseEther } from "viem";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAccount, useBalance, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
+import { parseEther } from "viem";
+import { Box, Button, Card, CardContent, Typography, TextField, Container } from "@mui/material";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function WalletTransfer() {
+  const { address } = useAccount();
+  const { queryKey } = useBalance({ address });
   const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
+  const queryClient = useQueryClient();
 
   const { data: hash, sendTransaction, isPending: isSendPending, error: sendError } = useSendTransaction();
 
@@ -13,9 +18,20 @@ export function WalletTransfer() {
     isLoading: isConfirming,
     isSuccess: isConfirmed,
     error: confirmError,
-  } = useWaitForTransactionReceipt({
-    hash,
-  });
+  } = useWaitForTransactionReceipt({ hash });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
+  useEffect(() => {
+    const onSuccess = async () => {
+      console.log("🚀 ~ WalletTransfer ~ onSuccess:");
+
+      await queryClient.invalidateQueries({ queryKey });
+    };
+
+    if (isConfirmed) {
+      onSuccess();
+    }
+  }, [isConfirmed, queryClient]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,55 +48,52 @@ export function WalletTransfer() {
   };
 
   return (
-    <div style={{ margin: "0 50px 0 50px" }}>
-      <h3>Wallet Transfer</h3>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="eth-address">Recipient Address:</label>
-          <input
-            id="eth-address"
-            type="text"
-            value={toAddress}
-            onChange={(e) => setToAddress(e.target.value)}
-            placeholder="0x..."
-            required
-            style={{ width: "100%", padding: "8px", margin: "5px 0" }}
-          />
-        </div>
-        <div>
-          <label htmlFor="eth-amount">Amount:</label>
-          <input
-            id="eth-amount"
-            type="number"
-            step="any"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0.01"
-            required
-            style={{ width: "100%", padding: "8px", margin: "5px 0" }}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={isSendPending || isConfirming}
-          style={{ padding: "10px 15px", cursor: "pointer" }}
-        >
-          {isSendPending ? "Confirming in Wallet..." : isConfirming ? "Sending..." : "Send"}
-        </button>
+    <Container maxWidth="sm">
+      <Card sx={{ mt: 4, p: 3 }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Wallet Transfer
+          </Typography>
+          <Box component="form" onSubmit={handleSubmit}>
+            <TextField
+              fullWidth
+              label="Recipient Address"
+              value={toAddress}
+              onChange={(e) => setToAddress(e.target.value)}
+              placeholder="0x..."
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Amount"
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.01"
+              margin="normal"
+              required
+            />
+            <Button fullWidth type="submit" variant="contained" sx={{ mt: 2 }} disabled={isSendPending || isConfirming}>
+              {isSendPending ? "Confirming in Wallet..." : isConfirming ? "Sending..." : "Send"}
+            </Button>
+          </Box>
 
-        {hash && (
-          <p style={{ marginTop: "10px" }}>
-            Transaction Hash:{" "}
-            <a href={`https://etherscan.io/tx/${hash}`} target="_blank" rel="noopener noreferrer">
-              {hash.slice(0, 6)}...{hash.slice(-4)}
-            </a>
-          </p>
-        )}
-        {isConfirming && <p>Waiting for confirmation...</p>}
-        {isConfirmed && <p style={{ color: "green" }}>Transaction confirmed!</p>}
-        {sendError && <p style={{ color: "red" }}>Error sending: {sendError.message}</p>}
-        {confirmError && <p style={{ color: "red" }}>Error confirming: {confirmError.message}</p>}
-      </form>
-    </div>
+          {hash && (
+            <Typography variant="body2" sx={{ mt: 2 }}>
+              Transaction Hash:{" "}
+              <a href={`https://etherscan.io/tx/${hash}`} target="_blank" rel="noopener noreferrer">
+                {hash.slice(0, 6)}...{hash.slice(-4)}
+              </a>
+            </Typography>
+          )}
+
+          {isConfirming && <Typography color="text.secondary">Waiting for confirmation...</Typography>}
+          {isConfirmed && <Typography color="green">Transaction confirmed!</Typography>}
+          {sendError && <Typography color="error">Error sending: {sendError.message}</Typography>}
+          {confirmError && <Typography color="error">Error confirming: {confirmError.message}</Typography>}
+        </CardContent>
+      </Card>
+    </Container>
   );
 }
